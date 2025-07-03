@@ -1,0 +1,71 @@
+import os
+import cv2
+import numpy as np
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+from sklearn.model_selection import train_test_split
+
+# Load and preprocess food images
+def load_food_data(folder_path, image_size=(64, 64)):
+    X, y = [], []
+    food_labels = os.listdir(folder_path)
+    label_map = {label: idx for idx, label in enumerate(food_labels)}
+
+    for label in food_labels:
+        label_folder = os.path.join(folder_path, label)
+        for file in os.listdir(label_folder):
+            img_path = os.path.join(label_folder, file)
+            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+            if img is not None:
+                img = cv2.resize(img, image_size)
+                X.append(img)
+                y.append(label_map[label])
+
+    return np.array(X), np.array(y), label_map
+
+# Example dataset path: folder contains subfolders for 'pizza', 'burger', 'salad', etc.
+X, y, label_map = load_food_data("path/to/food_dataset")
+
+# Normalize and reshape
+X = X / 255.0
+y = to_categorical(y)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# CNN model
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(64, 64, 3)),
+    MaxPooling2D(2,2),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D(2,2),
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dense(y.shape[1], activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test))
+
+# Food-to-calorie mapping (sample values)
+calorie_map = {
+    'pizza': 285,
+    'burger': 354,
+    'salad': 152,
+    'fries': 312,
+    'rice': 206
+}
+
+# Predict a food image and estimate calories
+def predict_and_estimate(image_path):
+    img = cv2.imread(image_path)
+    img = cv2.resize(img, (64, 64)) / 255.0
+    img = img.reshape(1, 64, 64, 3)
+    pred = model.predict(img)
+    class_index = np.argmax(pred)
+    food_name = list(label_map.keys())[list(label_map.values()).index(class_index)]
+    estimated_calories = calorie_map.get(food_name, "Unknown")
+    return food_name, estimated_calories
+
+# Example usage
+food, calories = predict_and_estimate("path/to/test_food.jpg")
+print(f"Predicted Food: {food}, Estimated Calories: {calories}")
